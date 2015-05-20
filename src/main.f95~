@@ -1,0 +1,163 @@
+program QuantumDynamics
+
+  !Basic configuration
+  complex*8, allocatable :: wavefunctions(:,:,:)
+  logical                :: reciprocalBase
+  logical                :: endAtBoxEdge
+  logical                :: storeData
+
+  !Box properties
+  !Set nDivZ to 1 to do a 2D simulation, or set nDivY to 1 to do a 1D simulation.
+  !For indefinite simulations (please do not use with data storage, that will get
+  !    out of hand pretty quickly in terms of storage space if accidentally left
+  !    to run for too long) set indefSimulation to .TRUE.
+  real*8                 :: subdivisionLength = 1d0
+  integer*8              :: nDivX = 100, nDivY = 1, nDivZ = 1
+  integer*8              :: nTimeSteps = 100
+  real*8                 :: timeStepLength = 1d0
+  logical                :: indefSimulation = .FALSE.
+
+  real*8                 :: boxLength
+
+  logical                :: potentialTimeDependent
+  real*8, allocatable    :: potential(:,:,:,:)
+
+
+  boxLength = subdivisionLength*nDivX
+
+!  call potential_insert_block(start(dim),end(dim),depth,sl,potential)
+!!  call potential_insert_ellipse(center(dim),radius(dim),depth,sl,potential)
+!  call potential_insert_coulomb(center(dim),depth,sl,potential)
+!  call potential_insert_slope(start(dim),end(dim),grad(dim+1,dim+1),sl,potential)
+!!  call insert_wavefunction_ellipse(center(dim),radius(dim),depth,sl,wavefunctions)  
+!  call insert_wavefunction_sine(start(dim),end(dim),momentum(dim),sl,wavefunctions)
+!  call insert_wavefunction_gaussian(mean(dim),variance(dim,dim),sl,wavefunctions)
+!  call insert_wavefunction_block(start(dim),end(dim),height,sl,wavefunctions)
+
+! The nature of the Coulomb potential depends on the dimensionality: 1D: -k 2D = k*ln(r) <zero at the borders>
+! while 3D = k/r. If one wants to use a 
+
+  if (endAtBoxEdge) then
+     allocate(wavefunctions(nDivX,nDivY,nDivZ))
+  else
+     allocate(wavefunctions(nDivX+2,nDivY+2,nDivZ))
+  end if
+  
+  wavefunctions = 0
+
+  allocate(potential(nDivX,nDivY,nDivZ,nTimeSteps))
+
+
+  
+!  if(reciprocalBase.eqv..FALSE.) then
+     call real_space_qd(wavefunctions,potential,potentialTimeDependent,endAtBoxEdge,nTimeSteps)
+!  else
+!     call reciprocal_space_qd(wavefunctions,potential)
+!  end if
+
+
+! See below for the real/reciprocal space functions
+
+end program QuantumDynamics
+
+
+
+subroutine real_space_qd(wavefunctions,potential,potentialTimeDependent,endAtBoxEdge,nTimeSteps)
+
+  implicit none
+  complex*8, intent(inout)  :: wavefunctions(:,:,:)
+  real*8, intent(in)        :: potential(:,:,:,:)
+  complex*16   :: kineticMatrix(size(wavefunctions,1),size(wavefunctions,2),size(wavefunctions,3), &
+ size(wavefunctions,1),size(wavefunctions,2),size(wavefunctions,3))
+  
+  integer*8, intent(in)     :: nTimeSteps
+  logical, intent(in)       :: endAtBoxEdge, potentialTimeDependent
+
+  integer*8                 :: i, timeStep, nDivXEff, nDivYEff, nDivZEff
+  logical                   :: running
+
+  nDivXEff = size(wavefunctions,1)
+  nDivYEff = size(wavefunctions,2)
+  nDivZEff = size(wavefunctions,3)
+
+!  allocate(kineticMatrix(nDivXEff,nDivYEff,nDivZEff,nDivXEff,nDivYEff,nDivZEff))
+
+  if(potentialTimeDependent .eqv. .FALSE.) then
+     do i=1,(nDivXEff-1)
+        kineticMatrix(i,:,:,i,:,:) = kineticMatrix(i,:,:,i,:,:) + 1d0 + reshape(potential(i,:,:,1),(/nDivYEff,nDivZEff, &
+ nDivYEff,nDivZEff/))
+        kineticMatrix(i,:,:,i+1,:,:) = kineticMatrix(i,:,:,i+1,:,:) - 5d-1
+        kineticMatrix(i+1,:,:,i,:,:) = kineticMatrix(i+1,:,:,i,:,:) - 5d-1
+     end do
+     if (nDivYEff > 1) then
+        do i=1,(nDivYEff-1)
+           kineticMatrix(:,i,:,:,i,:) = kineticMatrix(:,i,:,:,i,:) + 1d0 + reshape(potential(:,i,:,1),(/nDivYEff,nDivZEff, &
+ nDivYEff,nDivZEff/))
+           kineticMatrix(:,i,:,:,i+1,:) = kineticMatrix(:,i,:,:,i+1,:) - 5d-1
+           kineticMatrix(:,i+1,:,:,i,:) = kineticMatrix(:,i+1,:,:,i,:) - 5d-1
+        end do
+        if (nDivZEff > 1) then
+           do i=1,(nDivZEff-1)
+              kineticMatrix(:,:,i,:,:,i) = kineticMatrix(:,:,i,:,:,i) + 1d0 + reshape(potential(:,:,i,1),(/nDivYEff,nDivZEff, &
+ nDivYEff,nDivZEff/))
+              kineticMatrix(:,i,:,:,i+1,:) = kineticMatrix(:,i,:,:,i+1,:) - 5d-1
+              kineticMatrix(:,:,i+1,:,:,i) = kineticMatrix(:,:,i+1,:,:,i) - 5d-1
+           end do
+        end if
+     end if
+  else
+     do i=1,(nDivXEff-1)
+        kineticMatrix(i,:,:,i,:,:) = kineticMatrix(i,:,:,i,:,:) + 1d0
+        kineticMatrix(i,:,:,i+1,:,:) = kineticMatrix(i,:,:,i+1,:,:) - 5d-1
+        kineticMatrix(i+1,:,:,i,:,:) = kineticMatrix(i+1,:,:,i,:,:) - 5d-1
+     end do
+     if (nDivYEff > 1) then
+        do i=1,(nDivYEff-1)
+           kineticMatrix(:,i,:,:,i,:) = kineticMatrix(:,i,:,:,i,:) + 1d0
+           kineticMatrix(:,i,:,:,i+1,:) = kineticMatrix(:,i,:,:,i+1,:) - 5d-1
+           kineticMatrix(:,i+1,:,:,i,:) = kineticMatrix(:,i+1,:,:,i,:) - 5d-1
+        end do
+        if (nDivZEff > 1) then
+           do i=1,(nDivZEff-1)
+              kineticMatrix(:,:,i,:,:,i) = kineticMatrix(:,:,i,:,:,i) + 1d0
+              kineticMatrix(:,i,:,:,i+1,:) = kineticMatrix(:,i,:,:,i+1,:) - 5d-1
+              kineticMatrix(:,:,i+1,:,:,i) = kineticMatrix(:,:,i+1,:,:,i) - 5d-1
+           end do
+        end if
+     end if
+  end if
+  
+  
+  kineticMatrix(nDivXEff,:,:,nDivXEff,:,:) = kineticMatrix(nDivXEff,:,:,nDivXEff,:,:) + 1d0
+  kineticMatrix(:,nDivYEff,:,:,nDivYEff,:) = kineticMatrix(:,nDivYEff,:,:,nDivYEff,:) + 1d0
+  kineticMatrix(:,:,nDivZEff,:,:,nDivZEff) = kineticMatrix(:,:,nDivZEff,:,:,nDivZEff) + 1d0
+
+  kineticMatrix = kineticMatrix*(0d0,1d0)
+  ! This made the matrix completely imaginary.
+  
+  ! After making the kinetic (or total) matrix, do a wavefunction evolution loop:
+
+  running = .TRUE.
+  
+!  do while (indefSimulation .OR. running)
+     ! This might not look too effective, but the potentialTimeDependent condition will be caught
+     ! during compilation in gfortran (as seen during debugging)
+!     if(potentialTimeDependent .eqv. .FALSE.) then
+!        call wave_function_evolution()
+        
+
+!     if(timeStep == nTimeSteps) then
+!        running = .FALSE.
+!     end if
+
+!  end do
+  
+  
+  
+  
+end subroutine real_space_qd
+
+
+
+
+
