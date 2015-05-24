@@ -1,5 +1,7 @@
 module linalgalgorithms
 
+use scrstools
+  
   implicit none
   private
   public do_bicgstab
@@ -10,12 +12,15 @@ contains
 
   subroutine do_bicgstab(x,r,diag,linkto,weights,accuracy)
 
-    complex*16, intent(inout) :: x(:)
-    complex*16                :: xmult(size(x,1)), beta, rho, rholast, nu, rinit, rlast
-    complex*16, intent(inout) :: r(:)
+   complex*16, intent(inout) :: x(:)
+   complex*16              :: xmult(size(x)),beta,rho,rholast,nu(size(x)), &
+        rinit(size(x)),rlast(size(x)),alpha,omega,p(size(x)),s(size(x)), &
+        t(size(x))
+   complex*16, intent(inout) :: r(:)
 
-    complex*16, intent(in)    :: diag(:), linkto(:,:), weights(:,:)
-
+   complex*16, intent(in)    :: diag(:), weights(:,:)
+   integer*8, intent(in)     :: linkto(:,:)
+   real*8, intent(in)        :: accuracy
 
     ! First do an initial estimate. For smoothly evolving wavefunctions x_0 should be fine;
     ! this greatly simplifies proceedings as it allows to replace b by an initialiser
@@ -29,13 +34,20 @@ contains
 
     ! Now the big loop is ready for action:
     
-    do
+    iteration: do
        call mult_scrs_vec(diag,linkto,weights,p,nu)
        alpha = rho/(dot_product(rinit,nu))
-       s = rlast - alpha*nu
-       call mult_src_vec(diag,linkto,weights,s,t)
+       s = r - alpha*nu
+       call mult_scrs_vec(diag,linkto,weights,s,t)
        omega = dot_product(t,s)/dot_product(t,t)
+
+       if (all(abs(alpha*p+omega*s).lt.accuracy)) then
+          x=x+alpha*p+omega*s
+          print *, x(500)
+          exit iteration
+       end if
        
+      
        x = x + alpha*p + omega*s
        
        r = s - omega*t
@@ -46,12 +58,11 @@ contains
 
        p = beta*p
        p = p - beta*omega*nu + r
-    end do
+    end do iteration
     
-
+    r = (0,-2d0)*x
   end subroutine do_bicgstab
   
-
 
 
 

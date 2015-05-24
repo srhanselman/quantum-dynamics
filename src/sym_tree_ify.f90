@@ -1,5 +1,6 @@
-module SymTreeIfy
+module scrstools
 
+  
   implicit none
   private
   public scrs_ify
@@ -8,18 +9,19 @@ module SymTreeIfy
 
 contains
 
-  subroutine scrs_ify(matrix,diagonal,linkto,weight,maxlinks)
+  subroutine scrs_ify(matrix,diagonal,linkto,weights,maxlinks)
     ! This subroutine isolates the diagonal from the symmetric matrix, and subsequently 
     complex*16, intent(in)  :: matrix(:,:)
-    complex*16, intent(out) :: diagonal(:), weights(:)
+    complex*16, intent(out) :: diagonal(:), weights(:,:)
     integer*8, intent(in)   :: maxlinks
-    integer*8, intent(out)  :: linkto(:)
-    integer*8               :: i,j,k,N
+    integer*8, intent(out)  :: linkto(:,:)
+    integer*8               :: i,j,N
+    integer*8               :: k(size(matrix,1))
 
     N = size(matrix,1)
     k = 1
     linkto=1
-    weight=0
+    weights=0
 
     do i=1,N
        diagonal(i) = matrix(i,i)
@@ -27,12 +29,12 @@ contains
 
     ! Indeed I will break inner loop 
     do i=1,(N-2)
-       innerloop: do j=1,(N-1)
+       innerloop: do j=(i+1),(N-1)
           if (matrix(i,j).ne.0) then
-             linkto(i,k)=j
-             weights(i,k)=matrix(i,j)
-             k = k + 1
-             if (k.gt.maxlinks) then
+             linkto(i,k(i))=j
+             weights(i,k(i))=matrix(i,j)
+             k(i) = k(i) + 1
+             if (k(i).gt.maxlinks) then
                 exit innerloop
              end if
           end if
@@ -49,9 +51,9 @@ contains
     ! This subroutine isolates the diagonal from the symmetric matrix, and subsequently
 
     complex*16, intent(in)  :: diagonal(:), weights(:,:)
-    integer*8, intent(in)   :: linkto(:)
+    integer*8, intent(in)   :: linkto(:,:)
     complex*16, intent(in)  :: vec(:)
-    complex*16, intent(out) :: vecnew(size(vec,1))
+    complex*16, intent(out) :: vecnew(:)
     integer*8               :: i,j,k,N
 
     vecnew = vec*diagonal
@@ -76,4 +78,4 @@ contains
 
 
 
-end module SymTreeIfy
+end module scrstools
