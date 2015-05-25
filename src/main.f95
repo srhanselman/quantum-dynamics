@@ -20,7 +20,8 @@ use qdprocedures
   integer*8              :: nTimeSteps = 100
   real*8                 :: timeStepLength = 1d0
   logical                :: indefSimulation = .FALSE.
-  real*8                 :: deltat = 4d-4, deltax = 1d0
+  real*8                 :: deltat = 4d-2, deltax = 1d0
+  real*8                 :: accuracy = 1d-60
 
   real*8                 :: boxLength
 
@@ -32,6 +33,8 @@ use qdprocedures
   boxLength = subdivisionLength*nDivX
 
 
+  open(1,file="wavefunction.csv")
+  
   allocate(wavefunctions(nDivX,nDivY,nDivZ))
   
     
@@ -46,8 +49,10 @@ use qdprocedures
   
   
   
+  
 !  if(reciprocalBase.eqv..FALSE.) then
-     call real_space_qd(wavefunctions,potential,potentialTimeDependent,endAtBoxEdge,nTimeSteps,deltat,deltax)
+  call real_space_qd(wavefunctions,potential,potentialTimeDependent, &
+       endAtBoxEdge,nTimeSteps,deltat,deltax,accuracy)
 !  else
 !     call reciprocal_space_qd(wavefunctions,potential)
 !  end if

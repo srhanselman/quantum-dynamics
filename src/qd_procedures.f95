@@ -12,31 +12,37 @@ use scrstools
 
 contains
 
-  subroutine real_space_qd(wfinout,potential,potentialTimeDependent,endAtBoxEdge,nTimeSteps,deltat,deltax)
+  subroutine real_space_qd(wfinout,potentialin,potentialTimeDependent,endAtBoxEdge,nTimeSteps,deltat, &
+       deltax,accuracy)
 
     complex*16, intent(inout) :: wfinout(:,:,:)
-    real*8, intent(in)        :: potential(:,:,:,:), deltat, deltax
+    real*8, intent(in)        :: potentialin(:,:,:,:), deltat, deltax, accuracy
     real*8                    :: deltaxinvsq
     complex*16                :: kineticMatrix(size(wfinout,1),size(wfinout,2),size(wfinout,3), &
          size(wfinout,1),size(wfinout,2),size(wfinout,3))
 
     complex*16, allocatable   :: kmDiag(:), kmWeights(:,:), wf(:), initialiser(:)
     integer*8, allocatable    :: kmLinkTo(:,:)
+    real*8, allocatable       :: potential(:,:)
     
     integer*8, intent(in)     :: nTimeSteps
     logical, intent(in)       :: endAtBoxEdge, potentialTimeDependent
 
-    integer*8                 :: i, j, k, timeStep, nDivXEff, nDivYEff, nDivZEff
+    integer*8                 :: i, j, k, timeStep, nDivXEff, nDivYEff, nDivZEff, t
     integer*8                 :: nDivX, nDivY, nDivZ
     integer*8                 :: maxlinks
     logical                   :: running
 
+    character(len=20)         :: fmt
+    
     nDivXEff = size(wfinout,1)
     nDivYEff = size(wfinout,2)
     nDivZEff = size(wfinout,3)
     nDivX = nDivXEff
     nDivY = nDivYEff
     nDivZ = nDivZEff
+
+    write(fmt,'(a, i0, a)') '(I8, ', nDivX*nDivY*nDivZ, '(e20.14,a))'
 
     if(endAtBoxEdge.eqv..TRUE.) then
        maxlinks = 2
@@ -68,7 +74,7 @@ contains
     allocate( kmWeights(nDivXEff*nDivYEff*nDivZEff - 1 ,  maxlinks) )
     allocate( wf(nDivXEff*nDivYEff*nDivZEff) )
     allocate( initialiser(nDivXEff*nDivYEff*nDivZEff) )
-    
+    allocate( potential(nDivXEff*nDivYEff*nDivZEff , size(potentialin,4) ) )
 
     kineticMatrix = 0
     kmDiag = 0
@@ -132,6 +138,9 @@ contains
 
     
     wf = reshape(wfinout,(/nDivX*nDivY*nDivZ/))
+    potential = reshape(potentialin,(/nDivX*nDivY*nDivZ , nTimeSteps/))
+ 
+       
     
 !    kineticMatrix(nDivXEff,:,:,nDivXEff,:,:) = kineticMatrix(nDivXEff,:,:,nDivXEff,:,:) + 1d0
 !    kineticMatrix(:,nDivYEff,:,:,nDivYEff,:) = kineticMatrix(:,nDivYEff,:,:,nDivYEff,:) + 1d0
@@ -140,22 +149,46 @@ contains
     call scrs_ify(reshape(kineticMatrix,(/nDivX*nDivY*nDivZ,nDivX*nDivY*nDivZ/)), &
          kmDiag,kmLinkTo,kmWeights,maxlinks)
 
+    ! Equation: (1+iTH(t)/2)x_t = (1-iTH(t-1)/2)x_{t-1} -> (H(t) - 2i/T)x_t = (H(t-1) + 2i/T)x_{t-1}
+    ! initialiser = (H(t-1) + 2i/T)x - (H(t) - 2i/T)x = (H(t-1)-H(t)+2/T)x = (0.5V(t-1)-0.5V(t)+2/T).
+    initialiser = (0,2d0)*wf/deltat
 
-    ! initialiser = A'x - Ax = (A'-A)x = -2ix/deltat ; this greatly simplifies the first steps of BiCGstab.
-    initialiser = (0,-2d0)*wf/deltat
+    if(potentialTimeDependent.eqv..FALSE.) then
+       do i=1,nDivX*nDivY*nDivZ
+          kmDiag(i) = kmDiag(i) + (0,2d0)/deltat
+       end do
+    else
+       do i=1,nDivX*nDivY*nDivZ
+          kmDiag(i) = kmDiag(i) + (0,2d0)/deltat + potential(i,1)
+       end do
+    end if
     
-    do i=1,nDivX*nDivY*nDivZ
-       kmDiag(i) = kmDiag(i) + (0,1d0)/deltat
-    end do
+    call do_bicgstab(wf,initialiser,kmDiag,kmLinkTo,kmWeights,accuracy)
 
-    call do_bicgstab(wf,initialiser,kmDiag,kmLinkTo,kmWeights,1d-50)
-
-    print *, wf
+    if(potentialTimeDependent.eqv..FALSE.) then
+       kmDiag(:) = kmDiag(:) + potential(:,1)
+    end if
     
-  
-  
+    
+    timeloop: do t=2,nTimeSteps
+       if(potentialTimeDependent.eqv..TRUE.) then
+          kmDiag(:) = kmDiag(:) + 0.25d0*potential(:,(t-1)) + 0.75d0*potential(:,t)
+          initialiser = initialiser*(0.5d0*potential(:,(t-1)) - 0.5d0*potential(:,t) + 2d0/deltat)
+       else
+          initialiser = initialiser*2d0/deltat
+       end if
 
-  
+       call do_bicgstab(wf, initialiser,kmDiag,kmLinkTo,kmWeights,accuracy)
+
+       write(1,fmt) t,( REAL(wf(j)),',', j=1,size(wf,1) )
+       write(1,fmt) t,( AIMAG(wf(j)),',', j=1,size(wf,1) )
+       
+       if(potentialTimeDependent.eqv..TRUE.) then
+          kmDiag(:) = kmDiag(:) - 0.25d0*potential(:,t-1) - 0.75d0*potential(:,t)
+       end if
+       
+    end do timeloop
+    
   
   
   
