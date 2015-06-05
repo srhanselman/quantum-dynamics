@@ -20,7 +20,7 @@ use qdprocedures
   integer*8              :: nTimeSteps = 100
   real*8                 :: timeStepLength = 1d0
   logical                :: indefSimulation = .FALSE.
-  real*8                 :: deltat = 4d-2, deltax = 1d0
+  real*8                 :: deltat = 4d-3, deltax = 1d0
   real*8                 :: accuracy = 1d-60
 
   real*8                 :: boxLength
@@ -34,6 +34,7 @@ use qdprocedures
 
 
   open(1,file="wavefunction.csv")
+  open(2,file="intensities.dat")
   
   allocate(wavefunctions(nDivX,nDivY,nDivZ))
   
@@ -43,9 +44,11 @@ use qdprocedures
   allocate(potential(nDivX,nDivY,nDivZ,nTimeSteps))
 
   potential = 0
-  do i=450,550
-     wavefunctions(i,1,1) = exp(-(i-500)**2/4d2)
+  do i=400,600
+     !wavefunctions(i,1,1) = (0,1d0)*sin((i-4d0)/4d0)+ cos((i-4d0)/4d0)
+     wavefunctions(i,1,1) = (0.5d0,0.5d0)
   end do
+  wavefunctions = wavefunctions/sum(wavefunctions*conjg(wavefunctions))
   
   
   

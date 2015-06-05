@@ -33,7 +33,7 @@ contains
     integer*8                 :: maxlinks
     logical                   :: running
 
-    character(len=20)         :: fmt
+    character(len=40)         :: fmt
     
     nDivXEff = size(wfinout,1)
     nDivYEff = size(wfinout,2)
@@ -42,7 +42,9 @@ contains
     nDivY = nDivYEff
     nDivZ = nDivZEff
 
-    write(fmt,'(a, i0, a)') '(I8, ', nDivX*nDivY*nDivZ, '(e20.14,a))'
+    write(fmt,'(a, i0, a)') '(f14.9,', nDivX*nDivY*nDivZ, '(a,ES23.15e3))'
+
+    print *,fmt
 
     if(endAtBoxEdge.eqv..TRUE.) then
        maxlinks = 2
@@ -151,37 +153,29 @@ contains
 
     ! Equation: (1+iTH(t)/2)x_t = (1-iTH(t-1)/2)x_{t-1} -> (H(t) - 2i/T)x_t = (H(t-1) + 2i/T)x_{t-1}
     ! initialiser = (H(t-1) + 2i/T)x - (H(t) - 2i/T)x = (H(t-1)-H(t)+2/T)x = (0.5V(t-1)-0.5V(t)+2/T).
-    initialiser = (0,2d0)*wf/deltat
+    initialiser = (0,4d0)*wf/deltat
 
-    if(potentialTimeDependent.eqv..FALSE.) then
-       do i=1,nDivX*nDivY*nDivZ
-          kmDiag(i) = kmDiag(i) + (0,2d0)/deltat
-       end do
-    else
-       do i=1,nDivX*nDivY*nDivZ
-          kmDiag(i) = kmDiag(i) + (0,2d0)/deltat + potential(i,1)
-       end do
-    end if
+    kmDiag(:) = kmDiag(:) - (0,2d0)/deltat + potential(:,1)
     
     call do_bicgstab(wf,initialiser,kmDiag,kmLinkTo,kmWeights,accuracy)
 
-    if(potentialTimeDependent.eqv..FALSE.) then
-       kmDiag(:) = kmDiag(:) + potential(:,1)
-    end if
+ 
     
     
     timeloop: do t=2,nTimeSteps
+       
+       initialiser = (0,4d0)*wf/deltat
+       
        if(potentialTimeDependent.eqv..TRUE.) then
           kmDiag(:) = kmDiag(:) + 0.25d0*potential(:,(t-1)) + 0.75d0*potential(:,t)
-          initialiser = initialiser*(0.5d0*potential(:,(t-1)) - 0.5d0*potential(:,t) + 2d0/deltat)
-       else
-          initialiser = initialiser*2d0/deltat
+          initialiser = initialiser + wf*(potential(:,(t-1)) - potential(:,t))
        end if
 
        call do_bicgstab(wf, initialiser,kmDiag,kmLinkTo,kmWeights,accuracy)
 
-       write(1,fmt) t,( REAL(wf(j)),',', j=1,size(wf,1) )
-       write(1,fmt) t,( AIMAG(wf(j)),',', j=1,size(wf,1) )
+
+       write(1,fmt) t*deltat,(',',REAL(wf(j)), j=1,size(wf,1) )
+       write(1,fmt) t*deltat,(',',AIMAG(wf(j)), j=1,size(wf,1) )
        
        if(potentialTimeDependent.eqv..TRUE.) then
           kmDiag(:) = kmDiag(:) - 0.25d0*potential(:,t-1) - 0.75d0*potential(:,t)

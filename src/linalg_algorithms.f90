@@ -22,13 +22,15 @@ contains
    integer*8, intent(in)     :: linkto(:,:)
    real*8, intent(in)        :: accuracy
 
-    ! First do an initial estimate. For smoothly evolving wavefunctions x_0 should be fine;
-    ! this greatly simplifies proceedings as it allows to replace b by an initialiser
-    ! (as initialiser = A'x - Ax = (A'-A)x = -2ix).
-    rho   = 1
+   ! First do an initial estimate. For smoothly evolving wavefunctions x_0 should be fine;
+   ! this greatly simplifies proceedings as it allows to replace b by an initialiser
+   ! (as initialiser = A'x - Ax = (A'-A)x = -2ix).
+   ! Also note that the first steps are performed BEFORE the iteration loop (to make matters
+   ! more efficient); 
+    rho   = dot_product(r,r)
     alpha = 1
     omega = 1
-    beta  = 1
+    beta  = rho
     rinit = r
     p = r
 
@@ -49,7 +51,7 @@ contains
        
       
        x = x + alpha*p + omega*s
-       
+       print *,x(500)
        r = s - omega*t
 
        rholast = rho
@@ -59,8 +61,9 @@ contains
        p = beta*p
        p = p - beta*omega*nu + r
     end do iteration
+
+    print *,"done iterating"
     
-    r = (0,-2d0)*x
   end subroutine do_bicgstab
   
 
